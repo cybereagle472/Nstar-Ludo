@@ -6,9 +6,9 @@ A mobile-first Ludo game built with HTML, CSS and JavaScript. Play pass-and-play
 
 ## Play and run locally
 
-- **Repository (private):** https://github.com/cybereagle472/Nstar-Ludo
-- **Supabase project:** [Nstar Ludo dashboard](https://supabase.com/dashboard/project/zrwpystbqoisgjsghjcz)
-- The former GitHub Pages preview was unpublished when the repository became private. A separate host supporting private repositories is needed for a reliable public or access-controlled preview.
+- **Repository:** https://github.com/cybereagle472/Nstar-Ludo
+- **GitHub Pages preview:** https://cybereagle472.github.io/Nstar-Ludo/ (available after the Pages workflow succeeds).
+- **Supabase project:** [Nstar Ludo dashboard](https://supabase.com/dashboard/project/zrwpystbqoisgjsghjcz) (owner access required).
 
 To run locally, use Node.js 18 or later:
 
@@ -31,7 +31,7 @@ Friends, leaderboard and chat remain future features; the language preference is
 
 ## Supabase setup and important limitations
 
-This copy is configured for the dedicated `Nstar Ludo` project in `ap-south-1`. `supabase-config.js` contains only the **publishable** browser key, which is intentionally public and relies on database and Storage policies. Never add a service-role/secret key or database password to the browser app or a repository, even a private one. The Edge Function reads its server-only credentials from Supabase's injected environment.
+This copy is configured for the dedicated `Nstar Ludo` project in `ap-south-1`. `supabase-config.js` contains only the **publishable** browser key, which is intentionally public and relies on database and Storage policies. Never add a service-role/secret key, access token, OAuth client secret or database password to the browser app or Git history, even in a private repository. The Edge Function reads its server-only credentials from Supabase's injected environment. Keep local secrets in ignored files and deployment secrets in the relevant provider's secret store; `.gitignore` does not remove secrets that were already committed.
 
 The database migration is in `supabase/migrations/`:
 
@@ -64,7 +64,7 @@ npm run test:browser
 
 The browser test explicitly selects the local Node room backend. The Supabase room, Realtime, auth, profile and storage flows were also exercised against the configured project during setup; those integration tests create real cloud resources and are not part of the default test command.
 
-GitHub Actions runs tests whenever `main` is pushed. Its GitHub Pages deployment is skipped while the repository is private, because this account's Pages site was unpublished on the visibility change. Configure another host or explicitly adjust the deployment if your plan supports private-repository Pages. The local development server serves an allowlist of browser files and does not expose repository metadata, backend source or test files.
+GitHub Actions runs tests whenever `main` is pushed and deploys the browser-only files to GitHub Pages when the repository is public. The deployment is skipped while the repository is private unless your plan and workflow support private-repository Pages. The local development server serves an allowlist of browser files and does not expose repository metadata, backend source or test files.
 
 The backend function is deployed separately from `supabase/functions/nstar-room/index.ts`. It imports the shared root `engine.js`, so **redeploy the function whenever the engine changes**. For example, bundle it with Deno and deploy the bundle through the Supabase CLI or dashboard:
 

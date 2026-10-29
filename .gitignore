@@ -1,6 +1,15 @@
 node_modules/
+# Local configuration and credentials should never be committed.
 .env
 .env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+supabase/.temp/
+supabase/.branches/
 *.log
 .DS_Store
 coverage/
