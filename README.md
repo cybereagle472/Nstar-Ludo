@@ -76,7 +76,7 @@ The browser test exercises mobile play, saved dice, settings, the tour, offline 
 - Firebase authentication requires a project and a real end-to-end verification. The original project's credentials are not included.
 - The language selector saves the same English/Spanish/French/Hindi preference choices shown by the original app, but the interface is currently **English only**; translations remain to be written.
 - Browser vibration, notifications, audio, installation, and offline caching depend on device/browser support and permissions. The app's welcome tour is available from **How to play**, rather than forcing a first-run login.
-- This is a local Git repository. Publishing it as a new GitHub repository requires the owner to create a remote and push it, for example:
+- If working from the downloadable archive, publishing it as a new GitHub repository requires the owner to create a remote and push it, for example:
 
   ```bash
   git remote add origin https://github.com/YOUR-ACCOUNT/Nstar-Ludo.git
@@ -99,3 +99,9 @@ tests/                  Rule, room-server, and optional browser tests
 ```
 
 The original Nstar Ludo source code in this repository is released under the MIT terms in [LICENSE](LICENSE). Those terms **do not grant rights to the upstream third-party assets**; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## GitHub Pages preview
+
+The workflow at `.github/workflows/deploy-pages.yml` tests the project and deploys the static app on pushes to `main`. In the GitHub repository settings, select **Pages → Build and deployment → Source: GitHub Actions** if it is not already enabled. The workflow publishes only the browser app and required assets, not the Node room server or Git metadata.
+
+A GitHub Pages preview supports pass-and-play, local statistics, settings, and offline use after the first visit. **Private online rooms do not run on GitHub Pages** because it cannot execute the Node server. Firebase sign-in remains disabled until a Firebase web app is configured. Confirm the upstream asset rights described in `THIRD_PARTY_NOTICES.md` before making the repository or site public.

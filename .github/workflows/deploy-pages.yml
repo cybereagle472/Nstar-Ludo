@@ -1,0 +1,49 @@
+name: Deploy preview to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run game and server tests
+        run: npm test
+      - name: Prepare static preview
+        run: |
+          mkdir -p site/assets/{fonts,icons,images/dice,sounds}
+          cp index.html styles.css app.js engine.js auth.js firebase-config.js manifest.webmanifest sw.js site/
+          cp LICENSE THIRD_PARTY_NOTICES.md site/
+          cp assets/fonts/roboto-latin.woff2 assets/fonts/ROBOTO-OFL.txt site/assets/fonts/
+          cp assets/icons/* site/assets/icons/
+          cp assets/images/board.png site/assets/images/
+          cp assets/images/dice/* site/assets/images/dice/
+          cp assets/sounds/* site/assets/sounds/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
