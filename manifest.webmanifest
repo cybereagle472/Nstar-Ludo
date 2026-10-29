@@ -1,0 +1,13 @@
+{
+  "name": "Nstar Ludo",
+  "short_name": "Nstar Ludo",
+  "description": "A colorful Ludo game for friends and family.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#21136e",
+  "theme_color": "#21136e",
+  "icons": [
+    {"src":"assets/icons/icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"assets/icons/icon-512.png","sizes":"512x512","type":"image/png"}
+  ]
+}
