@@ -8,7 +8,7 @@ The following files were copied from [jamalihassan0307/LudoVerse](https://github
 - `assets/images/dice/*`
 - `assets/images/crown/*` and `assets/images/thankyou.gif` (included for reference; the new victory screen uses newly drawn badges instead)
 - `assets/reference-logo.jpg` (included for reference, not used as Nstar branding)
-- `assets/sounds/*`
+- `assets/sounds/roll_the_dice.mp3`, `assets/sounds/move.wav`, and `assets/sounds/laugh.mp3`
 
 The upstream repository did **not** contain a license file when inspected. A public repository is not, by itself, a grant of copyright permission. The rights to the board, dice, audio, photographs, memes, and other bundled upstream material are therefore **unverified**; some may belong to third parties. Obtain the necessary permission or replace these assets before distributing or publishing the project. The MIT license in this repository applies only to the newly authored Nstar Ludo code and original icons, not these upstream files.
 
@@ -18,9 +18,9 @@ The upstream APK and screenshots are not included; they were used only to inspec
 
 `assets/fonts/roboto-latin.woff2` is Roboto, obtained from Google Fonts. It is distributed under the SIL Open Font License 1.1; the license text is included at `assets/fonts/ROBOTO-OFL.txt`.
 
-## Firebase SDK
+## Original NStar artwork and audio
 
-When and only when the user configures Firebase, `auth.js` loads the official Firebase web SDK from Google's CDN at runtime. No Firebase SDK files or project credentials are bundled in this repository. Consult the SDK's upstream terms and the Firebase project policies for a deployment.
+`assets/boards/nstar-board.svg` is newly drawn for NStar Ludo, based on the game's 15-by-15 board coordinates. `assets/generated/ludo-hero.jpg` and `assets/generated/room-background.jpg` are original AI-generated artwork made for this project. `assets/sounds/victory.wav` is a newly synthesized chime. These assets are not copies of Yalla Ludo artwork. The legacy meme images from the reference are retained only for reference and are not shown in the game.
 
 ## Supabase JavaScript SDK
 

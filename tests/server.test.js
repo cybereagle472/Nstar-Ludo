@@ -73,3 +73,18 @@ test('online server validates saved dice and synchronizes legal moves', async t 
   const guestView = await (await fetch(`${base}/api/rooms/${host.code}?token=${encodeURIComponent(guest.token)}`)).json();
   assert.deepEqual(guestView.game,game.game);
 });
+
+test('preview serves only public app files, not repository or backend internals', async t => {
+  const server = createAppServer();
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  for (const path of ['/', '/ui-refresh.css', '/assets/boards/nstar-board.svg', '/assets/generated/ludo-hero.jpg', '/supabase.js']) {
+    const response = await fetch(base + path);
+    assert.equal(response.status, 200, `${path} should be public`);
+  }
+  for (const path of ['/.git/HEAD', '/server.js', '/package.json', '/README.md', '/tests/server.test.js', '/supabase/functions/nstar-room/index.ts', '/supabase/migrations/20261029152833_nstar_backend.sql', '/assets/.env']) {
+    const response = await fetch(base + path);
+    assert.equal(response.status, 404, `${path} must not be exposed`);
+  }
+});

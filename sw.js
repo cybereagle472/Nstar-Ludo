@@ -1,10 +1,11 @@
-const CACHE = 'nstar-ludo-v6';
+const CACHE = 'nstar-ludo-v7';
 const APP = [
-  './','./index.html','./styles.css','./app.js','./engine.js','./auth.js','./supabase.js','./supabase-config.js','./vendor/supabase-js.mjs','./manifest.webmanifest',
+  './','./index.html','./styles.css','./ui-refresh.css','./app.js','./engine.js','./auth.js','./supabase.js','./supabase-config.js','./vendor/supabase-js.mjs','./manifest.webmanifest',
   './assets/icons/brand.svg','./assets/icons/icon-192.png','./assets/icons/icon-512.png','./assets/fonts/roboto-latin.woff2',
+  './assets/boards/nstar-board.svg','./assets/generated/ludo-hero.jpg','./assets/generated/room-background.jpg',
   './assets/images/board.png','./assets/images/dice/1.png','./assets/images/dice/2.png','./assets/images/dice/3.png',
   './assets/images/dice/4.png','./assets/images/dice/5.png','./assets/images/dice/6.png','./assets/images/dice/draw.gif',
-  './assets/sounds/roll_the_dice.mp3','./assets/sounds/move.wav','./assets/sounds/laugh.mp3'
+  './assets/sounds/roll_the_dice.mp3','./assets/sounds/move.wav','./assets/sounds/victory.wav'
 ];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));

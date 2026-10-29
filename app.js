@@ -5,12 +5,14 @@ import * as Cloud from './supabase.js';
 const app = document.querySelector('#app');
 const modal = document.querySelector('#modal');
 const toastNode = document.querySelector('#toast');
+const announcer = document.querySelector('#game-announcer');
+let lastAnnouncement = '';
 const storage = {
   get(key, fallback, session = false) { try { const raw = (session ? sessionStorage : localStorage).getItem(`nstar.${key}`); return raw ? JSON.parse(raw) : fallback; } catch { return fallback; } },
   set(key, value, session = false) { try { (session ? sessionStorage : localStorage).setItem(`nstar.${key}`, JSON.stringify(value)); } catch {} },
   remove(key, session = false) { try { (session ? sessionStorage : localStorage).removeItem(`nstar.${key}`); } catch {} },
 };
-const defaults = { sound:true, vibration:true, notifications:false, music:false, theme:'system', language:'en' };
+const defaults = { sound:true, vibration:true, notifications:false, music:false, theme:'system', language:'en', boardTheme:'nstar' };
 const saved = storage.get('game', null);
 const state = {
   view:'home', tab:'play', menu:false,
@@ -64,30 +66,32 @@ function profileMenu(){
 function statCard(type, number, label) {
   return `<div class="stat-card ${type === 'trophy' ? 'wins' : ''}"><div class="stat-icon ${type === 'trophy' ? 'gold' : ''}">${icon(type)}</div><strong class="stat-number">${number}</strong><span class="stat-label">${label}</span></div>`;
 }
-function modeCard(color, title, description, detail, action, badge = '') {
-  return `<article class="mode-card ${color}">${badge ? `<span class="mode-badge">${badge}</span>` : ''}<div class="mode-icon">${icon(color === 'purple' ? 'wifi' : 'gamepad')}</div><h3>${title}</h3><p>${description}<br>${detail}</p><button type="button" class="mode-action" data-action="${action}">${icon('play')}${color === 'purple' ? 'Play Online' : 'Play Now'}</button></article>`;
+function modeCard(tone, title, description, detail, action, badge = '') {
+  const online = action === 'online';
+  const pawns = online ? `<span class="mode-wifi">${icon('wifi')}</span>` : `<span class="mini-pawns" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`;
+  return `<article class="mode-card ${tone}"><div class="mode-card-top">${pawns}<span class="mode-badge">${badge || 'PASS & PLAY'}</span></div><h3>${title}</h3><p>${description}<br>${detail}</p><button type="button" class="mode-action" data-action="${action}">${online ? 'Create or join' : 'Play now'} ${icon('arrow-right')}</button></article>`;
 }
 function homeContent(){
   if (state.tab !== 'play') {
     const friends = state.tab === 'friends';
-    return `<h2 class="content-heading">${friends ? 'Friends' : 'Leaderboard'}</h2><div class="empty-panel"><div class="empty-art">${icon(friends ? 'users' : 'chart')}</div><h3>Coming Soon!</h3><p>${friends ? 'Friend features will be available in a future update.' : 'The global leaderboard will be available in a future update.'}</p></div>`;
+    return `<h2 class="content-heading">${friends ? 'Friends' : 'Leaderboard'}</h2><div class="empty-panel"><div class="empty-art">${icon(friends ? 'users' : 'chart')}</div><h3>Coming Soon!</h3><p>${friends ? 'Your friends list is on its way. For now, invite someone to a private room.' : 'The global leaderboard is on its way. For now, enjoy a friendly match.'}</p><button class="secondary-button empty-action" data-action="${friends ? 'online' : 'tab'}" ${friends ? '' : 'data-value="play"'}>${friends ? 'Play online' : 'Back to play'}</button></div>`;
   }
   const hasLocal = !!state.local && state.local.state.phase !== 'finished';
   const hasOnline = !!state.online.session;
-  return `<div class="heading-row"><div class="section-title"><span class="section-icon">${icon('gamepad')}</span><div><h2>Game Modes</h2><p>Select your preferred way to play</p></div></div><span class="section-kicker">${icon('users')} MADE FOR GAME NIGHTS</span></div>
+  return `<section class="feature-banner" aria-label="Welcome to NStar Ludo"><div class="feature-copy"><span class="feature-eyebrow"><span class="feature-spark">✦</span> YOUR TABLE IS READY</span><h2>Game night<br><em>starts here.</em></h2><p>Roll, race, and make every move count.</p><button class="feature-button" data-action="${hasLocal ? 'resume-local' : 'start-2'}">${icon('play')} ${hasLocal ? 'Continue game' : 'Quick play'} <span>${icon('arrow-right')}</span></button></div></section>
+    <div class="heading-row"><div class="section-title"><div><span class="section-overline">PICK YOUR GAME</span><h2>Game Modes</h2><p>Choose how you want to play</p></div></div><button class="section-help" data-action="help">How to play ${icon('arrow-right')}</button></div>
     <div class="mode-grid">
-      ${modeCard('', '2 Players', 'Classic duel mode', 'Perfect for quick matches', 'start-2')}
-      ${modeCard('green', '3 Players', 'Triple threat challenge', 'Intense competition', 'start-3')}
-      ${modeCard('orange', '4 Players', 'Full board experience', 'Maximum entertainment', 'start-4')}
-      ${modeCard('purple', 'Online Mode', 'Play with friends', 'Private room multiplayer', 'online', 'BETA')}
+      ${modeCard('', '2 Players', 'The classic face-off', 'Share one device', 'start-2')}
+      ${modeCard('green', '3 Players', 'Three-way challenge', 'Share one device', 'start-3')}
+      ${modeCard('orange', '4 Players', 'A full table of fun', 'Share one device', 'start-4')}
+      ${modeCard('purple', 'Play Online', 'Private rooms with friends', 'Play from anywhere', 'online', 'BETA')}
     </div>
-    <div class="guide-banner"><img class="guide-board" src="assets/images/board.png" alt=""><div class="guide-copy"><h3>${hasLocal ? 'Your game is waiting' : hasOnline ? 'Return to your online room' : 'A little luck, a lot of fun.'}</h3><p>${hasLocal ? 'Pick up your pass-and-play game where you left off.' : hasOnline ? 'Jump back in while your room is still active.' : 'New to Ludo? Learn the rules and get rolling in no time.'}</p></div><button class="text-button" data-action="${hasLocal ? 'resume-local' : hasOnline ? 'resume-online' : 'help'}">${hasLocal || hasOnline ? 'Resume game' : 'How to play'} ${icon('arrow-right')}</button></div>`;
+    <div class="guide-banner"><img class="guide-board" src="assets/images/board.png" alt=""><div class="guide-copy"><h3>${hasLocal ? 'Your game is waiting' : hasOnline ? 'Return to your online room' : 'New to the game?'}</h3><p>${hasLocal ? 'Pick up your pass-and-play game where you left off.' : hasOnline ? 'Jump back in while your room is still active.' : 'Learn the basics in less than a minute.'}</p></div><button class="text-button" data-action="${hasLocal ? 'resume-local' : hasOnline ? 'resume-online' : 'help'}">${hasLocal || hasOnline ? 'Resume game' : 'Learn the rules'} ${icon('arrow-right')}</button></div>`;
 }
 function renderHome(){
-  return `<div class="home-page"><header class="home-top"><div class="container"><div class="topbar">${brand()}<div class="top-actions"><button class="top-link" data-action="help">${icon('help')}<span>How to play</span></button><span class="offline-badge">Ready to play</span></div></div>
-    <div class="home-hero"><div class="welcome-row"><div class="profile-wrap"><div class="welcome-profile">${avatar()}<div class="welcome-copy"><p>Welcome back,</p><h1>${escapeHTML(state.profile.name)}</h1><div class="welcome-sub">${icon('sparkles')} Let’s make it a game night</div></div></div><button class="gear-button" data-action="profile-menu" aria-label="Open account menu" aria-expanded="${state.menu}">${icon('settings')}</button>${profileMenu()}</div>
-    <div class="stats-grid">${statCard('gamepad', shownStats().games, 'Games Played')}${statCard('trophy', shownStats().wins, 'Games Won')}</div></div>${homeTabs()}</div></div></header>
-    <main class="container home-content">${homeContent()}</main><div class="small-footnote">Nstar Ludo &nbsp;·&nbsp; Made for playing together</div><button class="quick-play" data-action="start-2">${icon('play')} Quick Play</button></div>`;
+  return `<div class="home-page"><header class="home-top"><div class="container"><div class="topbar">${brand()}<div class="top-actions"><button class="top-link" data-action="help" aria-label="How to play">${icon('help')}<span>How to play</span></button><span class="offline-badge">Ready to play</span></div></div>
+    <div class="home-hero"><div class="welcome-row"><div class="profile-wrap"><div class="welcome-profile">${avatar()}<div class="welcome-copy"><p>Welcome back,</p><h1>${escapeHTML(state.profile.name)}</h1><div class="welcome-sub">${icon('sparkles')} Let’s make it a game night</div></div></div><button class="gear-button" data-action="profile-menu" aria-label="Open account menu" aria-expanded="${state.menu}">${icon('settings')}</button>${profileMenu()}</div><div class="stats-grid">${statCard('gamepad', shownStats().games, 'Games')}${statCard('trophy', shownStats().wins, 'Wins')}</div></div></div>${homeTabs()}</div></header>
+    <main class="container home-content">${homeContent()}</main><div class="small-footnote">NSTAR LUDO &nbsp;·&nbsp; MADE FOR GAME NIGHTS</div></div>`;
 }
 function settingToggle(key, label, description, glyph) {
   return `<label class="setting-row"><span class="setting-icon">${icon(glyph)}</span><span class="setting-copy"><strong>${label}</strong><small>${description}</small></span><span class="switch"><input type="checkbox" role="switch" data-setting="${key}" aria-label="${label}" ${state.settings[key] ? 'checked' : ''}><span></span></span></label>`;
@@ -101,7 +105,7 @@ function renderSettings(){
   return `<div class="settings-page"><header class="subpage-top"><div class="container"><div class="page-heading"><button class="back-button" data-action="home" aria-label="Back to home">${icon('arrow-left')}</button><h1>Settings</h1></div><div class="profile-card">${avatar()}<div class="profile-copy"><strong>${escapeHTML(state.profile.name)}</strong><span>${escapeHTML(state.profile.email || 'Playing as a guest')}</span><em>★ &nbsp; Ludo Player</em></div><button class="edit-button" data-action="edit-profile" aria-label="Edit profile">${icon('edit')}</button></div></div></header>
   <main class="container settings-content"><section class="settings-block"><h2>Game Statistics</h2><p class="stats-source">${state.authUser && state.cloudStats ? 'Cloud stats · online games' : 'This device · pass-and-play and online games'}</p><div class="settings-stats"><div class="settings-stat">${icon('gamepad')}<strong>${stats.games}</strong><span>Games</span></div><div class="settings-stat">${icon('trophy')}<strong>${stats.wins}</strong><span>Wins</span></div><div class="settings-stat">${icon('chart')}<strong>${rate}%</strong><span>Win Rate</span></div></div></section>
   <section class="settings-block"><h2>Game Settings</h2><div class="setting-list">${settingToggle('sound','Sound','Enable game sounds','sound')}${settingToggle('music','Background music','Play a gentle game-night tune','music')}${settingToggle('vibration','Vibration','Enable vibration feedback when supported','vibrate')}${settingToggle('notifications','Notifications','Turn notifications on when allowed','bell')}</div></section>
-  <section class="settings-block"><h2>Appearance</h2><div class="setting-list"><label class="setting-row"><span class="setting-icon">${icon('palette')}</span><span class="setting-copy"><strong>Theme</strong><small>Choose app theme</small></span><select class="setting-select" data-setting="theme" aria-label="Theme"><option value="system" ${state.settings.theme === 'system' ? 'selected' : ''}>System</option><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Light</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Dark</option></select></label><label class="setting-row"><span class="setting-icon">${icon('globe')}</span><span class="setting-copy"><strong>Language</strong><small>Preference saved; interface currently in English</small></span><select class="setting-select" data-setting="language" aria-label="Language"><option value="en" ${state.settings.language === 'en' ? 'selected' : ''}>English</option><option value="es" ${state.settings.language === 'es' ? 'selected' : ''}>Spanish</option><option value="fr" ${state.settings.language === 'fr' ? 'selected' : ''}>French</option><option value="hi" ${state.settings.language === 'hi' ? 'selected' : ''}>Hindi</option></select></label></div></section>
+  <section class="settings-block"><h2>Appearance</h2><div class="setting-list"><label class="setting-row"><span class="setting-icon">${icon('gamepad')}</span><span class="setting-copy"><strong>Board style</strong><small>Choose the NStar or original LudoVerse board</small></span><select class="setting-select" data-setting="boardTheme" aria-label="Board style"><option value="nstar" ${state.settings.boardTheme === 'nstar' ? 'selected' : ''}>NStar</option><option value="classic" ${state.settings.boardTheme === 'classic' ? 'selected' : ''}>Classic</option></select></label><label class="setting-row"><span class="setting-icon">${icon('palette')}</span><span class="setting-copy"><strong>Theme</strong><small>Choose app theme</small></span><select class="setting-select" data-setting="theme" aria-label="Theme"><option value="system" ${state.settings.theme === 'system' ? 'selected' : ''}>System</option><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Light</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Dark</option></select></label><label class="setting-row"><span class="setting-icon">${icon('globe')}</span><span class="setting-copy"><strong>Language</strong><small>Preference saved; interface currently in English</small></span><select class="setting-select" data-setting="language" aria-label="Language"><option value="en" ${state.settings.language === 'en' ? 'selected' : ''}>English</option><option value="es" ${state.settings.language === 'es' ? 'selected' : ''}>Spanish</option><option value="fr" ${state.settings.language === 'fr' ? 'selected' : ''}>French</option><option value="hi" ${state.settings.language === 'hi' ? 'selected' : ''}>Hindi</option></select></label></div></section>
   <section class="settings-block"><h2>Account</h2><div class="setting-list">${settingButton('lock','Change Password','Update your account password','change-password')}${settingButton('shield','Privacy Information','How your game data is stored','privacy')}${settingButton('file','Terms Information','About this demonstration','terms')}</div></section><button class="primary-button settings-signout" data-action="${state.authUser ? 'sign-out' : 'sign-in'}">${icon('logout')} ${state.authUser ? 'Sign Out' : 'Sign In'}</button></main></div>`;
 }
 function onlinePlayerRow(color, player, snapshot){
@@ -119,10 +123,10 @@ function renderLobby(snapshot){
 function renderOnline(){
   const snap = state.online.room;
   const available = state.online.available;
-  return `<div class="online-page"><header class="subpage-top online-top"><div class="container"><div class="topbar">${brand()}<span class="offline-badge">Private rooms</span></div><div class="page-heading"><button class="back-button" data-action="online-back" aria-label="Back to home">${icon('arrow-left')}</button><div class="heading-copy"><h1>Play Online</h1><p>Bring your friends to the board, wherever they are.</p></div></div></div></header><main class="container online-content">${snap && snap.status === 'waiting' ? renderLobby(snap) : `<div class="online-intro"><h2>Let’s play together</h2><p>Create a private room or join one with a code. Share it with friends wherever they are.</p></div>
+  return `<div class="online-page"><header class="subpage-top online-top"><div class="container"><div class="topbar">${brand()}<span class="connection-status ${available === true ? 'connected' : available === false ? 'disconnected' : 'checking'}" role="status">${available === true ? 'Connected' : available === false ? 'Offline' : 'Connecting…'}</span></div><div class="page-heading"><button class="back-button" data-action="online-back" aria-label="Back to home">${icon('arrow-left')}</button><div class="heading-copy"><h1>Play Online</h1><p>Bring your friends to the board, wherever they are.</p></div></div></div></header><main class="container online-content">${snap && snap.status === 'waiting' ? renderLobby(snap) : `<div class="online-intro"><h2>Let’s play together</h2><p>Create a private room or join one with a code. Share it with friends wherever they are.</p></div>
     <div class="online-grid"><section class="online-card"><span class="section-icon">${icon('users')}</span><h3>Create a room</h3><p>Choose the number of players, then send your room code to friends.</p><label class="field-label" for="room-size">Number of players</label><select id="room-size" class="field" data-setting="room-size"><option value="2" ${state.online.selectedCount===2?'selected':''}>2 players</option><option value="3" ${state.online.selectedCount===3?'selected':''}>3 players</option><option value="4" ${state.online.selectedCount===4?'selected':''}>4 players</option></select><button class="primary-button" data-action="create-room" ${available !== true ? 'disabled' : ''}>${icon('play')} Create room</button></section>
     <section class="online-card"><span class="section-icon">${icon('wifi')}</span><h3>Join a room</h3><p>Have a code from a friend? Enter it below to join their game.</p><form data-form="join-room"><label class="field-label" for="room-code">Room code</label><input class="field field-code" id="room-code" name="code" placeholder="e.g. ABC234" value="${escapeHTML(state.online.joinCode)}" minlength="6" maxlength="6" autocomplete="off" required><button class="secondary-button" type="submit" ${available !== true ? 'disabled' : ''}>Join room ${icon('arrow-right')}</button></form></section></div>
-    <div class="info-note">${icon('info')}<span>${available === false ? (Cloud.cloudConfigured ? 'The online service is unavailable. Check your connection and try again.' : 'Online play needs the included JavaScript room server. Run npm start, or deploy the server, then open the app from it.') : available === null ? 'Checking the room service…' : (Cloud.cloudConfigured ? 'Private rooms use secure cloud storage and real-time updates. Rooms expire after 7 days of inactivity.' : 'Rooms are private and temporary. They last while this server is running; local pass-and-play also works offline.')}</span></div>`}</main></div>`;
+    <div class="info-note">${icon('info')}<span>${available === false ? (Cloud.cloudConfigured ? 'The online service is unavailable. Check your connection and try again.' : 'Online play needs the included JavaScript room server. Run npm start, or deploy the server, then open the app from it.') : available === null ? 'Checking the room service…' : (Cloud.cloudConfigured ? 'Private rooms use secure cloud storage and real-time updates. Rooms expire after 7 days of inactivity.' : 'Rooms are private and temporary. They last while this server is running; local pass-and-play also works offline.')}</span>${available === false ? '<button class="retry-online" data-action="retry-online">Try again</button>' : ''}</div>`}</main></div>`;
 }
 function canAct(){ return state.mode !== 'online' || (!state.online.connecting && state.online.room?.you === currentColor(state.game)); }
 function renderBoard(game){
@@ -160,14 +164,18 @@ function renderBoard(game){
     const number = game.lastRoll?.color === player.color ? game.lastRoll.value : 1;
     return `<button type="button" class="corner-die ${player.color} ${ready ? 'ready' : 'inactive'}" style="--player:${COLORS[player.color].hex}" data-action="roll" aria-label="Roll dice for ${cap(player.color)}" ${ready ? '' : 'disabled'}><img src="assets/images/dice/${number}.png" alt=""></button>`;
   }).join('');
-  return `<div class="board-stage"><div class="board-frame"><img class="board-image" src="assets/images/board.png" alt="A Ludo board with green, yellow, red and blue corners">${pawnMarkup}${turnLabel}${corners}</div></div>`;
+  const boardAsset = state.settings.boardTheme === 'classic' ? 'assets/images/board.png' : 'assets/boards/nstar-board.svg';
+  return `<div class="board-stage"><div class="board-frame"><img class="board-image" src="${boardAsset}" alt="Ludo board with green, yellow, red and blue corners">${pawnMarkup}${turnLabel}${corners}</div></div>`;
 }
 function renderScores(game){
   const places = ['1st','2nd','3rd','4th'];
   return `<div class="scoreboard" aria-label="Player scores">${game.players.map(player => {
     const place = (game.winners || []).indexOf(player.color);
-    const detail = place >= 0 ? `${places[place]} place` : state.mode === 'online' ? escapeHTML(player.name) : 'pawns home';
-    return `<div class="score-player ${player.color === currentColor(game) && game.phase !== 'finished' ? 'active' : ''}" style="--player:${COLORS[player.color].hex};--player-text:${player.color === 'yellow' ? '#9b7400' : COLORS[player.color].hex}"><i class="score-dot"></i><strong>${countHome(game,player.color)}</strong><span>${cap(player.color)}</span><small>${detail}</small></div>`;
+    const current = player.color === currentColor(game) && game.phase !== 'finished';
+    const home = countHome(game,player.color);
+    const display = state.mode === 'online' ? player.name : cap(player.color);
+    const detail = place >= 0 ? `${places[place]} place` : `${home}/4 home`;
+    return `<div class="score-player ${current ? 'active' : ''}" style="--player:${COLORS[player.color].hex}" aria-label="${escapeHTML(display)}, ${detail}${current ? ', current turn' : ''}"><i class="score-dot" aria-hidden="true">${icon('user')}</i><span class="score-name">${escapeHTML(display)}</span><small>${detail}</small>${current ? '<b class="seat-active">PLAYING</b>' : ''}</div>`;
   }).join('')}</div>`;
 }
 function renderHistory(game){
@@ -208,6 +216,8 @@ function render(){
   else if (state.view === 'game') app.innerHTML = renderGame();
   else if (state.view === 'auth') app.innerHTML = renderAuth();
   document.title = `${state.view === 'game' ? 'Game · ' : state.view === 'settings' ? 'Settings · ' : state.view === 'online' ? 'Online · ' : ''}Nstar Ludo`;
+  const announcement = state.view === 'game' && state.game ? state.game.message : '';
+  if (announcer && announcement !== lastAnnouncement) { announcer.textContent = announcement; lastAnnouncement = announcement; }
 }
 function navigate(view, scroll = true){ state.view = view; state.menu = false; render(); if (scroll) window.scrollTo({top:0,behavior:'instant'}); }
 function openModal(title, body, footer = '') {
@@ -283,7 +293,7 @@ function randomDie(){
   do { crypto.getRandomValues(bytes); } while (bytes[0] >= 252);
   return bytes[0] % 6 + 1;
 }
-const effects = { roll:'assets/sounds/roll_the_dice.mp3', move:'assets/sounds/move.wav', win:'assets/sounds/laugh.mp3' };
+const effects = { roll:'assets/sounds/roll_the_dice.mp3', move:'assets/sounds/move.wav', win:'assets/sounds/victory.wav' };
 function playSound(kind){
   if (!state.settings.sound || !effects[kind]) return;
   try { const audio = new Audio(effects[kind]); audio.volume = kind === 'win' ? .45 : .65; audio.play().catch(() => {}); } catch {}
@@ -556,6 +566,7 @@ async function doSignOut(){
 async function setPreference(input){
   const key = input.dataset.setting;
   if (key === 'room-size') { state.online.selectedCount = Number(input.value); return; }
+  if (key === 'boardTheme') { state.settings.boardTheme = input.value === 'classic' ? 'classic' : 'nstar'; persistSettings(); return; }
   if (key === 'theme') { state.settings.theme = input.value; applyTheme(); persistSettings(); return; }
   if (key === 'language') { state.settings.language = input.value; persistSettings(); if (input.value !== 'en') toast('Preference saved. Interface translations are not available yet.'); return; }
   let value = input.checked;
@@ -602,6 +613,7 @@ document.addEventListener('click', async event => {
       break;
     case 'resume-online': await resumeOnline(); break;
     case 'online-back': if (state.online.room?.status === 'waiting') await leaveRoom(); else navigate('home'); break;
+    case 'retry-online': await checkOnline(); break;
     case 'create-room': await createRoom(); break;
     case 'leave-room': await leaveRoom(); break;
     case 'copy-room': await copyRoom(); break;

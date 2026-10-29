@@ -6,9 +6,9 @@ A mobile-first Ludo game built with HTML, CSS and JavaScript. Play pass-and-play
 
 ## Play and run locally
 
-- **GitHub Pages:** https://cybereagle472.github.io/Nstar-Ludo/
-- **Repository:** https://github.com/cybereagle472/Nstar-Ludo
+- **Repository (private):** https://github.com/cybereagle472/Nstar-Ludo
 - **Supabase project:** [Nstar Ludo dashboard](https://supabase.com/dashboard/project/zrwpystbqoisgjsghjcz)
+- The former GitHub Pages preview was unpublished when the repository became private. A separate host supporting private repositories is needed for a reliable public or access-controlled preview.
 
 To run locally, use Node.js 18 or later:
 
@@ -23,7 +23,7 @@ The included `server.js` also retains the original development-only in-memory No
 ## Features
 
 - 2, 3 or 4 player games; safe squares, captures, exact home, saved sixes, selectable dice, three-six forfeits and finishing ranks.
-- Responsive mobile and desktop screens, local game saves, sound, optional music, vibration, notifications, themes and a PWA app shell.
+- A mobile-first game lobby and table, original NStar board artwork and a Classic LudoVerse board option, clearer player/turn states, animated dice and pawns, sound, optional music, vibration, notifications, themes, local game saves and a PWA app shell.
 - **Supabase online private rooms:** a host shares a six-character code or link. Guests can play without registering. The Edge Function rolls dice and validates turns and moves using the same game engine as the browser. Rooms and their game state are stored in Postgres; Realtime broadcasts revision notifications and presence, with a polling fallback. A tab can resume its room using its session token.
 - **Account profiles and avatar storage:** email/password authentication, a private account profile and a public profile photo (JPEG, PNG or WebP, up to 2 MB). Signed-in users have server-recorded **online** games and wins. Local pass-and-play and guest statistics stay on the current device and are not included in cloud online stats.
 
@@ -31,7 +31,7 @@ Friends, leaderboard and chat remain future features; the language preference is
 
 ## Supabase setup and important limitations
 
-This copy is configured for the dedicated `Nstar Ludo` project in `ap-south-1`. `supabase-config.js` contains only the **publishable** browser key, which is intentionally public and relies on database and Storage policies. Never add a service-role/secret key or database password to the browser app or this public repository. The Edge Function reads its server-only credentials from Supabase's injected environment.
+This copy is configured for the dedicated `Nstar Ludo` project in `ap-south-1`. `supabase-config.js` contains only the **publishable** browser key, which is intentionally public and relies on database and Storage policies. Never add a service-role/secret key or database password to the browser app or a repository, even a private one. The Edge Function reads its server-only credentials from Supabase's injected environment.
 
 The database migration is in `supabase/migrations/`:
 
@@ -64,7 +64,9 @@ npm run test:browser
 
 The browser test explicitly selects the local Node room backend. The Supabase room, Realtime, auth, profile and storage flows were also exercised against the configured project during setup; those integration tests create real cloud resources and are not part of the default test command.
 
-GitHub Actions runs tests and publishes the static browser files to GitHub Pages whenever `main` is pushed. The backend function is deployed separately from `supabase/functions/nstar-room/index.ts`. It imports the shared root `engine.js`, so **redeploy the function whenever the engine changes**. For example, bundle it with Deno and deploy the bundle through the Supabase CLI or dashboard:
+GitHub Actions runs tests whenever `main` is pushed. Its GitHub Pages deployment is skipped while the repository is private, because this account's Pages site was unpublished on the visibility change. Configure another host or explicitly adjust the deployment if your plan supports private-repository Pages. The local development server serves an allowlist of browser files and does not expose repository metadata, backend source or test files.
+
+The backend function is deployed separately from `supabase/functions/nstar-room/index.ts`. It imports the shared root `engine.js`, so **redeploy the function whenever the engine changes**. For example, bundle it with Deno and deploy the bundle through the Supabase CLI or dashboard:
 
 ```bash
 deno bundle --minify --output /tmp/nstar-room.js supabase/functions/nstar-room/index.ts
@@ -77,7 +79,7 @@ The function intentionally accepts guest requests and must have gateway JWT veri
 ## Project layout
 
 ```text
-index.html, styles.css      Responsive UI and app shell
+index.html, styles.css, ui-refresh.css  Responsive UI and app shell
 app.js, engine.js           Game screens and shared Ludo rules
 supabase.js, auth.js        Cloud rooms, Realtime, profiles, storage and auth adapters
 supabase-config.js          Public project URL and publishable key only
@@ -86,7 +88,8 @@ supabase/functions/         Authoritative room Edge Function source
 vendor/                     Bundled Supabase browser SDK and license texts
 server.js                   Optional in-memory local development room server
 sw.js, assets/              Offline cache, game assets, fonts, sound and icons
-tests/                      Rule, server, client-routing and optional browser tests
+tests/                      Rule, board alignment, server, client-routing and optional browser tests
+tools/generate-board.py       Regenerates the original NStar board SVG
 ```
 
 The original Nstar Ludo source code in this repository is released under the MIT terms in [LICENSE](LICENSE). Those terms **do not grant rights to upstream third-party assets**; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

@@ -26,8 +26,8 @@ jobs:
         run: npm test
       - name: Prepare static preview
         run: |
-          mkdir -p site/vendor site/assets/{fonts,icons,images/dice,sounds}
-          cp index.html styles.css app.js engine.js auth.js supabase.js supabase-config.js manifest.webmanifest sw.js site/
+          mkdir -p site/vendor site/assets/{fonts,icons,images/dice,sounds,boards,generated}
+          cp index.html styles.css ui-refresh.css app.js engine.js auth.js supabase.js supabase-config.js manifest.webmanifest sw.js site/
           cp LICENSE THIRD_PARTY_NOTICES.md site/
           cp vendor/supabase-js.mjs vendor/*LICENSE*.txt site/vendor/
           cp assets/fonts/roboto-latin.woff2 assets/fonts/ROBOTO-OFL.txt site/assets/fonts/
@@ -35,11 +35,18 @@ jobs:
           cp assets/images/board.png site/assets/images/
           cp assets/images/dice/* site/assets/images/dice/
           cp assets/sounds/* site/assets/sounds/
+          cp assets/boards/* site/assets/boards/
+          cp assets/generated/* site/assets/generated/
+      # GitHub Free unpublishes Pages when the repository is private. Keep tests
+      # running without attempting a deployment to the now-unavailable site.
       - uses: actions/configure-pages@v5
+        if: ${{ !github.event.repository.private }}
       - uses: actions/upload-pages-artifact@v3
+        if: ${{ !github.event.repository.private }}
         with:
           path: site
   deploy:
+    if: ${{ !github.event.repository.private }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

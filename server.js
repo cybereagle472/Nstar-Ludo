@@ -4,14 +4,18 @@
  * use durable storage, auth, rate limiting and TLS before production deployment.
  */
 import http from 'node:http';
-import { createReadStream, statSync } from 'node:fs';
+import { createReadStream, statSync, realpathSync } from 'node:fs';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { randomBytes, randomInt } from 'node:crypto';
 import { createGame, currentColor, movePawn, rollDice, PLAYER_COLORS } from './engine.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const TYPES = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.mjs':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.mp3':'audio/mpeg', '.wav':'audio/wav', '.ico':'image/x-icon', '.woff2':'font/woff2' };
+const TYPES = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.mjs':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.webp':'image/webp', '.mp3':'audio/mpeg', '.wav':'audio/wav', '.ico':'image/x-icon', '.woff2':'font/woff2' };
+// The development preview serves the browser app only, never repository metadata,
+// backend source, tests, build tooling, or unrecognized root files.
+const PUBLIC_FILES = new Set(['/index.html','/styles.css','/ui-refresh.css','/app.js','/engine.js','/auth.js','/supabase.js','/supabase-config.js','/sw.js','/manifest.webmanifest','/LICENSE','/THIRD_PARTY_NOTICES.md']);
+const PUBLIC_ASSET_EXTENSIONS = new Set(['.svg','.png','.jpg','.jpeg','.gif','.webp','.mp3','.wav','.woff2','.txt']);
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_TTL = 2 * 60 * 60 * 1000;
 
@@ -160,11 +164,19 @@ export function createAppServer({ rollDie = () => randomInt(1, 7) } = {}) {
     let pathname;
     try { pathname = decodeURIComponent(url.pathname); } catch { return json(res, 400, { error:'Bad URL.' }); }
     if (pathname === '/') pathname = '/index.html';
-    if (pathname.split('/').some(part => part.startsWith('.')) || /\/(tests|server\.js|package(?:-lock)?\.json)(\/|$)/.test(pathname)) return json(res, 404, { error:'Not found.' });
+    const ext = extname(pathname).toLowerCase();
+    const isAsset = pathname.startsWith('/assets/') && PUBLIC_ASSET_EXTENSIONS.has(ext);
+    const isVendor = pathname.startsWith('/vendor/') && (ext === '.mjs' || ext === '.txt');
+    if (pathname.split('/').some(part => part.startsWith('.')) || (!PUBLIC_FILES.has(pathname) && !isAsset && !isVendor)) return json(res, 404, { error:'Not found.' });
     const file = resolve(ROOT, '.' + pathname);
     if (!file.startsWith(ROOT + sep)) return json(res, 403, { error:'Forbidden.' });
     let info;
-    try { info = statSync(file); } catch { return json(res, 404, { error:'Not found.' }); }
+    try {
+      // Reject symlinks, including directory symlinks, rather than serving a
+      // non-public file that happens to be reachable from a public path.
+      if (realpathSync(file) !== file) return json(res, 404, { error:'Not found.' });
+      info = statSync(file);
+    } catch { return json(res, 404, { error:'Not found.' }); }
     if (!info.isFile()) return json(res, 404, { error:'Not found.' });
     res.writeHead(200, { 'Content-Type':TYPES[extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control':/\.(html|js|css|webmanifest)$/.test(file) ? 'no-cache' : 'public, max-age=3600', 'Content-Length':info.size });
     if (req.method === 'HEAD') res.end(); else createReadStream(file).pipe(res);
