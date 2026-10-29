@@ -1,6 +1,6 @@
-const CACHE = 'nstar-ludo-v5';
+const CACHE = 'nstar-ludo-v6';
 const APP = [
-  './','./index.html','./styles.css','./app.js','./engine.js','./auth.js','./firebase-config.js','./manifest.webmanifest',
+  './','./index.html','./styles.css','./app.js','./engine.js','./auth.js','./supabase.js','./supabase-config.js','./vendor/supabase-js.mjs','./manifest.webmanifest',
   './assets/icons/brand.svg','./assets/icons/icon-192.png','./assets/icons/icon-512.png','./assets/fonts/roboto-latin.woff2',
   './assets/images/board.png','./assets/images/dice/1.png','./assets/images/dice/2.png','./assets/images/dice/3.png',
   './assets/images/dice/4.png','./assets/images/dice/5.png','./assets/images/dice/6.png','./assets/images/dice/draw.gif',

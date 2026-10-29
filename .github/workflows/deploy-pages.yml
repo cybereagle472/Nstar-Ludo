@@ -21,14 +21,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Run game and server tests
         run: npm test
       - name: Prepare static preview
         run: |
-          mkdir -p site/assets/{fonts,icons,images/dice,sounds}
-          cp index.html styles.css app.js engine.js auth.js firebase-config.js manifest.webmanifest sw.js site/
+          mkdir -p site/vendor site/assets/{fonts,icons,images/dice,sounds}
+          cp index.html styles.css app.js engine.js auth.js supabase.js supabase-config.js manifest.webmanifest sw.js site/
           cp LICENSE THIRD_PARTY_NOTICES.md site/
+          cp vendor/supabase-js.mjs vendor/*LICENSE*.txt site/vendor/
           cp assets/fonts/roboto-latin.woff2 assets/fonts/ROBOTO-OFL.txt site/assets/fonts/
           cp assets/icons/* site/assets/icons/
           cp assets/images/board.png site/assets/images/

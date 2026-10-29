@@ -11,7 +11,7 @@ import { randomBytes, randomInt } from 'node:crypto';
 import { createGame, currentColor, movePawn, rollDice, PLAYER_COLORS } from './engine.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
-const TYPES = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.mp3':'audio/mpeg', '.wav':'audio/wav', '.ico':'image/x-icon', '.woff2':'font/woff2' };
+const TYPES = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.mjs':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.webmanifest':'application/manifest+json', '.svg':'image/svg+xml', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.mp3':'audio/mpeg', '.wav':'audio/wav', '.ico':'image/x-icon', '.woff2':'font/woff2' };
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ROOM_TTL = 2 * 60 * 60 * 1000;
 

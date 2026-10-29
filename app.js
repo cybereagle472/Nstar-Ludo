@@ -1,5 +1,6 @@
 import { COLORS, PLAYER_COLORS, createGame, currentColor, currentPlayer, countHome, legalMoves, legalDiceForPawn, movePawn, pawnPosition, rollDice } from './engine.js';
 import * as Auth from './auth.js';
+import * as Cloud from './supabase.js';
 
 const app = document.querySelector('#app');
 const modal = document.querySelector('#modal');
@@ -18,8 +19,8 @@ const state = {
   stats:{ games:0, wins:0, ...storage.get('stats', {}) },
   local:saved?.state?.players && saved?.state?.pieces ? saved : null,
   game:null, mode:null, busy:false,
-  online:{ available:null, room:null, session:storage.get('online-session', null, true), stream:null, connecting:false, joinCode:'', selectedCount:2 },
-  authMode:'login', authUser:null, tourPage:0,
+  online:{ available:null, room:null, session:storage.get('online-session', null, true), stream:null, connecting:false, joinCode:'', selectedCount:2, realtimeHealthy:false, presence:[], generation:0, pollTimer:null, fallbackTimer:null, pendingRefresh:null, refreshAgain:false },
+  authMode:'login', authUser:null, cloudStats:null, tourPage:0,
 };
 const $ = (selector, root = document) => root.querySelector(selector);
 const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -27,6 +28,7 @@ const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':
 const cap = color => COLORS[color]?.label || String(color);
 const initials = name => String(name).trim().split(/\s+/).slice(0, 2).map(x => x[0] || '').join('').toUpperCase() || 'GP';
 const isGuest = () => !state.authUser && state.profile.name === 'Guest Player';
+const shownStats = () => state.authUser && state.cloudStats ? state.cloudStats : state.stats;
 let toastTimer;
 function toast(message) {
   toastNode.textContent = message; toastNode.classList.add('show');
@@ -46,7 +48,8 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyThe
 
 function avatar(sizeClass = '') {
   const guest = isGuest();
-  return `<div class="avatar ${guest ? '' : 'initials'} ${sizeClass}" aria-hidden="true">${guest ? icon('user') : escapeHTML(initials(state.profile.name))}<span class="avatar-dot"></span></div>`;
+  const picture = state.profile.avatarUrl && /^https:\/\//.test(state.profile.avatarUrl) ? `<img class="avatar-photo" src="${escapeHTML(state.profile.avatarUrl)}" alt="">` : '';
+  return `<div class="avatar ${guest ? '' : 'initials'} ${sizeClass}" aria-hidden="true">${picture || (guest ? icon('user') : escapeHTML(initials(state.profile.name)))}<span class="avatar-dot"></span></div>`;
 }
 function brand() {
   return `<button type="button" class="brand" data-action="home" aria-label="Nstar Ludo home"><img src="assets/icons/brand.svg" alt=""><span class="brand-text"><strong>Nstar</strong> Ludo<span class="brand-dot">.</span></span></button>`;
@@ -83,7 +86,7 @@ function homeContent(){
 function renderHome(){
   return `<div class="home-page"><header class="home-top"><div class="container"><div class="topbar">${brand()}<div class="top-actions"><button class="top-link" data-action="help">${icon('help')}<span>How to play</span></button><span class="offline-badge">Ready to play</span></div></div>
     <div class="home-hero"><div class="welcome-row"><div class="profile-wrap"><div class="welcome-profile">${avatar()}<div class="welcome-copy"><p>Welcome back,</p><h1>${escapeHTML(state.profile.name)}</h1><div class="welcome-sub">${icon('sparkles')} Let’s make it a game night</div></div></div><button class="gear-button" data-action="profile-menu" aria-label="Open account menu" aria-expanded="${state.menu}">${icon('settings')}</button>${profileMenu()}</div>
-    <div class="stats-grid">${statCard('gamepad', state.stats.games, 'Games Played')}${statCard('trophy', state.stats.wins, 'Games Won')}</div></div>${homeTabs()}</div></div></header>
+    <div class="stats-grid">${statCard('gamepad', shownStats().games, 'Games Played')}${statCard('trophy', shownStats().wins, 'Games Won')}</div></div>${homeTabs()}</div></div></header>
     <main class="container home-content">${homeContent()}</main><div class="small-footnote">Nstar Ludo &nbsp;·&nbsp; Made for playing together</div><button class="quick-play" data-action="start-2">${icon('play')} Quick Play</button></div>`;
 }
 function settingToggle(key, label, description, glyph) {
@@ -93,16 +96,17 @@ function settingButton(glyph, title, description, action){
   return `<button class="setting-row setting-row-button" data-action="${action}"><span class="setting-icon">${icon(glyph)}</span><span class="setting-copy"><strong>${title}</strong><small>${description}</small></span>${icon('chevron')}</button>`;
 }
 function renderSettings(){
-  const rate = state.stats.games ? Math.round(state.stats.wins / state.stats.games * 100) : 0;
+  const stats = shownStats();
+  const rate = stats.games ? Math.round(stats.wins / stats.games * 100) : 0;
   return `<div class="settings-page"><header class="subpage-top"><div class="container"><div class="page-heading"><button class="back-button" data-action="home" aria-label="Back to home">${icon('arrow-left')}</button><h1>Settings</h1></div><div class="profile-card">${avatar()}<div class="profile-copy"><strong>${escapeHTML(state.profile.name)}</strong><span>${escapeHTML(state.profile.email || 'Playing as a guest')}</span><em>★ &nbsp; Ludo Player</em></div><button class="edit-button" data-action="edit-profile" aria-label="Edit profile">${icon('edit')}</button></div></div></header>
-  <main class="container settings-content"><section class="settings-block"><h2>Game Statistics</h2><div class="settings-stats"><div class="settings-stat">${icon('gamepad')}<strong>${state.stats.games}</strong><span>Games</span></div><div class="settings-stat">${icon('trophy')}<strong>${state.stats.wins}</strong><span>Wins</span></div><div class="settings-stat">${icon('chart')}<strong>${rate}%</strong><span>Win Rate</span></div></div></section>
+  <main class="container settings-content"><section class="settings-block"><h2>Game Statistics</h2><p class="stats-source">${state.authUser && state.cloudStats ? 'Cloud stats · online games' : 'This device · pass-and-play and online games'}</p><div class="settings-stats"><div class="settings-stat">${icon('gamepad')}<strong>${stats.games}</strong><span>Games</span></div><div class="settings-stat">${icon('trophy')}<strong>${stats.wins}</strong><span>Wins</span></div><div class="settings-stat">${icon('chart')}<strong>${rate}%</strong><span>Win Rate</span></div></div></section>
   <section class="settings-block"><h2>Game Settings</h2><div class="setting-list">${settingToggle('sound','Sound','Enable game sounds','sound')}${settingToggle('music','Background music','Play a gentle game-night tune','music')}${settingToggle('vibration','Vibration','Enable vibration feedback when supported','vibrate')}${settingToggle('notifications','Notifications','Turn notifications on when allowed','bell')}</div></section>
   <section class="settings-block"><h2>Appearance</h2><div class="setting-list"><label class="setting-row"><span class="setting-icon">${icon('palette')}</span><span class="setting-copy"><strong>Theme</strong><small>Choose app theme</small></span><select class="setting-select" data-setting="theme" aria-label="Theme"><option value="system" ${state.settings.theme === 'system' ? 'selected' : ''}>System</option><option value="light" ${state.settings.theme === 'light' ? 'selected' : ''}>Light</option><option value="dark" ${state.settings.theme === 'dark' ? 'selected' : ''}>Dark</option></select></label><label class="setting-row"><span class="setting-icon">${icon('globe')}</span><span class="setting-copy"><strong>Language</strong><small>Preference saved; interface currently in English</small></span><select class="setting-select" data-setting="language" aria-label="Language"><option value="en" ${state.settings.language === 'en' ? 'selected' : ''}>English</option><option value="es" ${state.settings.language === 'es' ? 'selected' : ''}>Spanish</option><option value="fr" ${state.settings.language === 'fr' ? 'selected' : ''}>French</option><option value="hi" ${state.settings.language === 'hi' ? 'selected' : ''}>Hindi</option></select></label></div></section>
   <section class="settings-block"><h2>Account</h2><div class="setting-list">${settingButton('lock','Change Password','Update your account password','change-password')}${settingButton('shield','Privacy Information','How your game data is stored','privacy')}${settingButton('file','Terms Information','About this demonstration','terms')}</div></section><button class="primary-button settings-signout" data-action="${state.authUser ? 'sign-out' : 'sign-in'}">${icon('logout')} ${state.authUser ? 'Sign Out' : 'Sign In'}</button></main></div>`;
 }
 function onlinePlayerRow(color, player, snapshot){
   const you = player?.color === snapshot.you;
-  return `<div class="room-player ${player ? '' : 'waiting'}" style="--player:${COLORS[color].hex}"><span class="room-player-dot"></span><div><strong>${player ? escapeHTML(player.name) : 'Waiting for player…'}</strong><small>${cap(color)}${you ? ' · You' : ''}${player && player.color === snapshot.host ? ' · Host' : ''}</small></div><span class="room-status">${player ? (player.connected ? 'Connected' : 'Reconnecting') : ''}</span></div>`;
+  return `<div class="room-player ${player ? '' : 'waiting'}" style="--player:${COLORS[color].hex}"><span class="room-player-dot"></span><div><strong>${player ? escapeHTML(player.name) : 'Waiting for player…'}</strong><small>${cap(color)}${you ? ' · You' : ''}${player && player.color === snapshot.host ? ' · Host' : ''}</small></div><span class="room-status">${player ? (Cloud.cloudConfigured ? (state.online.realtimeHealthy ? (player.connected ? 'Connected' : 'Away') : 'Joined') : (player.connected ? 'Connected' : 'Reconnecting')) : ''}</span></div>`;
 }
 function renderLobby(snapshot){
   const host = snapshot.host === snapshot.you;
@@ -115,10 +119,10 @@ function renderLobby(snapshot){
 function renderOnline(){
   const snap = state.online.room;
   const available = state.online.available;
-  return `<div class="online-page"><header class="subpage-top online-top"><div class="container"><div class="topbar">${brand()}<span class="offline-badge">Private rooms</span></div><div class="page-heading"><button class="back-button" data-action="online-back" aria-label="Back to home">${icon('arrow-left')}</button><div class="heading-copy"><h1>Play Online</h1><p>Bring your friends to the board, wherever they are.</p></div></div></div></header><main class="container online-content">${snap && snap.status === 'waiting' ? renderLobby(snap) : `<div class="online-intro"><h2>Let’s play together</h2><p>Create a private room or join one with a code. All players need to use the same hosted Nstar Ludo server.</p></div>
+  return `<div class="online-page"><header class="subpage-top online-top"><div class="container"><div class="topbar">${brand()}<span class="offline-badge">Private rooms</span></div><div class="page-heading"><button class="back-button" data-action="online-back" aria-label="Back to home">${icon('arrow-left')}</button><div class="heading-copy"><h1>Play Online</h1><p>Bring your friends to the board, wherever they are.</p></div></div></div></header><main class="container online-content">${snap && snap.status === 'waiting' ? renderLobby(snap) : `<div class="online-intro"><h2>Let’s play together</h2><p>Create a private room or join one with a code. Share it with friends wherever they are.</p></div>
     <div class="online-grid"><section class="online-card"><span class="section-icon">${icon('users')}</span><h3>Create a room</h3><p>Choose the number of players, then send your room code to friends.</p><label class="field-label" for="room-size">Number of players</label><select id="room-size" class="field" data-setting="room-size"><option value="2" ${state.online.selectedCount===2?'selected':''}>2 players</option><option value="3" ${state.online.selectedCount===3?'selected':''}>3 players</option><option value="4" ${state.online.selectedCount===4?'selected':''}>4 players</option></select><button class="primary-button" data-action="create-room" ${available !== true ? 'disabled' : ''}>${icon('play')} Create room</button></section>
     <section class="online-card"><span class="section-icon">${icon('wifi')}</span><h3>Join a room</h3><p>Have a code from a friend? Enter it below to join their game.</p><form data-form="join-room"><label class="field-label" for="room-code">Room code</label><input class="field field-code" id="room-code" name="code" placeholder="e.g. ABC234" value="${escapeHTML(state.online.joinCode)}" minlength="6" maxlength="6" autocomplete="off" required><button class="secondary-button" type="submit" ${available !== true ? 'disabled' : ''}>Join room ${icon('arrow-right')}</button></form></section></div>
-    <div class="info-note">${icon('info')}<span>${available === false ? 'Online play needs the included JavaScript room server. Run npm start, or deploy the server, then open the app from it.' : available === null ? 'Checking the room server…' : 'Rooms are private and temporary. They last while this server is running; local pass-and-play also works offline.'}</span></div>`}</main></div>`;
+    <div class="info-note">${icon('info')}<span>${available === false ? (Cloud.cloudConfigured ? 'The online service is unavailable. Check your connection and try again.' : 'Online play needs the included JavaScript room server. Run npm start, or deploy the server, then open the app from it.') : available === null ? 'Checking the room service…' : (Cloud.cloudConfigured ? 'Private rooms use secure cloud storage and real-time updates. Rooms expire after 7 days of inactivity.' : 'Rooms are private and temporary. They last while this server is running; local pass-and-play also works offline.')}</span></div>`}</main></div>`;
 }
 function canAct(){ return state.mode !== 'online' || (!state.online.connecting && state.online.room?.you === currentColor(state.game)); }
 function renderBoard(game){
@@ -195,7 +199,7 @@ function renderGame(){
 }
 function renderAuth(){
   const signup = state.authMode === 'signup';
-  return `<div class="auth-page ${signup ? 'signup' : ''}"><div class="auth-shell"><button class="auth-back" data-action="home" aria-label="Back to home">${icon('arrow-left')}</button><img class="auth-logo" src="assets/icons/brand.svg" alt=""><h1 class="auth-title">NSTAR LUDO</h1><section class="auth-card"><h1>${signup ? 'Create Account' : 'Login'}</h1>${Auth.authConfigured ? '' : `<p class="auth-note">Account sign-in needs a Firebase project to be configured. You can continue as a guest and play offline.</p>`}<form data-form="auth">${signup ? '<input class="field" name="name" placeholder="Full name" aria-label="Full name" maxlength="24" required autocomplete="name">' : ''}<input class="field" type="email" name="email" placeholder="Email" aria-label="Email" required autocomplete="email"><input class="field" type="password" name="password" placeholder="Password" aria-label="Password" required minlength="6" autocomplete="${signup ? 'new-password' : 'current-password'}">${signup ? '<input class="field" type="password" name="confirm" placeholder="Confirm password" aria-label="Confirm password" required minlength="6" autocomplete="new-password">' : '<button type="button" class="forgot" data-action="forgot-password">Forgot Password?</button>'}<button class="primary-button" type="submit" ${Auth.authConfigured ? '' : 'disabled'}>${signup ? 'SIGN UP' : 'LOGIN'}</button></form></section><p class="auth-switch">${signup ? 'Already have an account?' : "Don’t have an account?"} <button data-action="auth-switch">${signup ? 'Login' : 'Sign Up'}</button></p><div class="auth-divider">OR</div><button class="auth-google" data-action="google-login" ${Auth.authConfigured ? '' : 'disabled'}><span class="google-g">G</span> Sign in with Google</button><button class="auth-offline" data-action="home">${icon('gamepad')} Play Offline</button></div></div>`;
+  return `<div class="auth-page ${signup ? 'signup' : ''}"><div class="auth-shell"><button class="auth-back" data-action="home" aria-label="Back to home">${icon('arrow-left')}</button><img class="auth-logo" src="assets/icons/brand.svg" alt=""><h1 class="auth-title">NSTAR LUDO</h1><section class="auth-card"><h1>${signup ? 'Create Account' : 'Login'}</h1>${Auth.authConfigured ? `<p class="auth-note">Online rooms work without an account. Email sign-up currently needs a configured mail provider for public users.</p>` : `<p class="auth-note">Account sign-in is unavailable in local-server mode. You can continue as a guest.</p>`}<form data-form="auth">${signup ? '<input class="field" name="name" placeholder="Full name" aria-label="Full name" maxlength="24" required autocomplete="name">' : ''}<input class="field" type="email" name="email" placeholder="Email" aria-label="Email" required autocomplete="email"><input class="field" type="password" name="password" placeholder="Password" aria-label="Password" required minlength="6" autocomplete="${signup ? 'new-password' : 'current-password'}">${signup ? '<input class="field" type="password" name="confirm" placeholder="Confirm password" aria-label="Confirm password" required minlength="6" autocomplete="new-password">' : '<button type="button" class="forgot" data-action="forgot-password">Forgot Password?</button>'}<button class="primary-button" type="submit" ${Auth.authConfigured ? '' : 'disabled'}>${signup ? 'SIGN UP' : 'LOGIN'}</button></form></section><p class="auth-switch">${signup ? 'Already have an account?' : "Don’t have an account?"} <button data-action="auth-switch">${signup ? 'Login' : 'Sign Up'}</button></p><div class="auth-divider">OR</div><button class="auth-google" data-action="google-login" ${Auth.googleConfigured ? '' : 'disabled'}><span class="google-g">G</span> Sign in with Google${Auth.googleConfigured ? '' : ' (setup required)'}</button><button class="auth-offline" data-action="home">${icon('gamepad')} Play Offline</button></div></div>`;
 }
 function render(){
   if (state.view === 'home') app.innerHTML = renderHome();
@@ -226,7 +230,7 @@ function showTour(page = 0){
   openModal(title, `<div class="tour-graphic"><img src="assets/images/board.png" alt="Colorful Ludo board"><span class="tour-sparkle">${icon('sparkles')}</span></div><p class="tour-description">${description}</p><div class="tour-dots" aria-label="Tour page ${state.tourPage+1} of ${slides.length}">${slides.map((_,i) => `<button class="tour-dot ${i === state.tourPage ? 'active' : ''}" data-action="tour-page" data-page="${i}" aria-label="Go to tour page ${i+1}"></button>`).join('')}</div>`, `<button class="secondary-button" data-action="close-modal">Skip</button><button class="primary-button" data-action="${state.tourPage === slides.length-1 ? 'close-modal' : 'tour-next'}">${state.tourPage === slides.length-1 ? 'Get started' : 'Next'} ${icon('arrow-right')}</button>`);
 }
 function editProfile(){
-  openModal('Edit profile', `<form class="modal-form" data-form="profile"><label class="field-label" for="profile-name">Player name</label><input class="field" id="profile-name" name="name" value="${escapeHTML(state.profile.name)}" maxlength="24" required autocomplete="nickname"><p class="auth-note">Your profile and stats are saved on this device${state.authUser ? '; your display name is also updated in Firebase' : ''}.</p><div class="modal-actions"><button type="button" class="secondary-button" data-action="close-modal">Cancel</button><button type="submit" class="primary-button">Save changes</button></div></form>`);
+  openModal('Edit profile', `<form class="modal-form" data-form="profile"><label class="field-label" for="profile-name">Player name</label><input class="field" id="profile-name" name="name" value="${escapeHTML(state.profile.name)}" maxlength="24" required autocomplete="nickname">${state.authUser ? `<label class="field-label" for="profile-avatar">Profile photo (optional)</label><input class="field" id="profile-avatar" name="avatar" type="file" accept="image/jpeg,image/png,image/webp"><p class="auth-note">Your name, picture, and online-game stats are saved to your account. Photos are public and must be 2 MB or smaller.</p>` : `<p class="auth-note">Your guest profile and stats are saved on this device. Sign in to save a profile photo.</p>`}<div class="modal-actions"><button type="button" class="secondary-button" data-action="close-modal">Cancel</button><button type="submit" class="primary-button">Save changes</button></div></form>`);
   $('#profile-name', modal)?.focus();
 }
 function confirmExit(){
@@ -358,6 +362,7 @@ async function performMove(index, die){
   finally { state.busy = false; if (state.view === 'game') render(); }
 }
 async function api(path, body, timeout = 10000){
+  if (Cloud.cloudConfigured) return Cloud.roomApi(path,body,timeout);
   const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeout);
   try {
     const response = await fetch(`./api/${path}`, { method:body ? 'POST' : 'GET', headers:body ? {'Content-Type':'application/json'} : {}, body:body ? JSON.stringify(body) : undefined, signal:controller.signal, cache:'no-store' });
@@ -374,13 +379,52 @@ async function checkOnline(){
   if (state.view === 'online') render();
 }
 function disconnectRoom(){
-  state.online.stream?.close(); state.online.stream = null; state.online.connecting = false;
+  state.online.generation++;
+  state.online.stream?.close(); state.online.stream = null;
+  clearInterval(state.online.pollTimer); clearTimeout(state.online.fallbackTimer);
+  state.online.pollTimer = null; state.online.fallbackTimer = null;
+  state.online.connecting = false; state.online.realtimeHealthy = false; state.online.presence = [];
+  state.online.pendingRefresh = null; state.online.refreshAgain = false;
+}
+async function refreshOnline(){
+  const session = state.online.session;
+  if (!session) return;
+  if (state.online.pendingRefresh) { state.online.refreshAgain = true; return state.online.pendingRefresh; }
+  const generation = state.online.generation;
+  const pending = api(`rooms/${encodeURIComponent(session.code)}?token=${encodeURIComponent(session.token)}`)
+    .then(snapshot => { if (state.online.generation === generation && state.online.session?.token === session.token) applyOnlineSnapshot(snapshot); })
+    .finally(() => {
+      if (state.online.pendingRefresh === pending) state.online.pendingRefresh = null;
+      if (state.online.refreshAgain && state.online.generation === generation) { state.online.refreshAgain = false; refreshOnline().catch(() => {}); }
+    });
+  state.online.pendingRefresh = pending;
+  return pending;
 }
 function connectRoom(){
   disconnectRoom();
-  const session = state.online.session;
+  const session = state.online.session, room = state.online.room;
   if (!session) return;
   state.online.connecting = true;
+  if (Cloud.cloudConfigured && room?.channel) {
+    const generation = state.online.generation;
+    const current = () => generation === state.online.generation && state.online.session?.token === session.token;
+    const updateView = () => { if (state.view === 'online' || (state.view === 'game' && state.mode === 'online')) render(); };
+    state.online.fallbackTimer = setTimeout(() => { if (current() && state.online.connecting) { state.online.connecting=false; state.online.realtimeHealthy=false; updateView(); } },7000);
+    Cloud.subscribeRoom(room.channel, room.you,
+      () => { if (current()) refreshOnline().catch(() => {}); },
+      colors => { if (!current()) return; state.online.presence = colors; if (state.online.room) state.online.room.players = state.online.room.players.map(p => ({...p,connected:colors.includes(p.color)})); updateView(); },
+      status => {
+        if (!current()) return;
+        if (status === 'SUBSCRIBED') { clearTimeout(state.online.fallbackTimer); state.online.connecting=false; state.online.realtimeHealthy=true; refreshOnline().catch(() => {}); }
+        else if (['CHANNEL_ERROR','TIMED_OUT','CLOSED'].includes(status)) { state.online.connecting=false; state.online.realtimeHealthy=false; }
+        updateView();
+      }
+    ).then(stream => { if (current()) state.online.stream=stream; else stream.close(); })
+     .catch(() => { if (current()) { state.online.connecting=false; state.online.realtimeHealthy=false; updateView(); } });
+    // Poll as a recovery path when the websocket or a notification is missed.
+    state.online.pollTimer = setInterval(() => { if (current()) refreshOnline().catch(() => {}); },15000);
+    return;
+  }
   const stream = new EventSource(`./api/rooms/${encodeURIComponent(session.code)}/events?token=${encodeURIComponent(session.token)}`);
   state.online.stream = stream;
   stream.onopen = () => { state.online.connecting = false; if (state.view === 'online' || (state.view === 'game' && state.mode === 'online')) render(); };
@@ -389,6 +433,12 @@ function connectRoom(){
     if (state.online.stream !== stream) return;
     try { applyOnlineSnapshot(JSON.parse(event.data)); } catch(error) { console.error('Invalid room update', error); }
   };
+}
+async function refreshCloudStats(){
+  const user = state.authUser;
+  if (!user || !Cloud.cloudConfigured) return;
+  try { const stats = await Cloud.loadStats(user.id); if (state.authUser?.id === user.id) { state.cloudStats=stats; if (state.view === 'home' || state.view === 'settings') render(); } }
+  catch(error) { console.warn('Could not refresh cloud statistics:',error.message); }
 }
 function recordOnline(snapshot, previous){
   if (!snapshot.game) return;
@@ -400,6 +450,7 @@ function recordOnline(snapshot, previous){
     state.stats.games += 1; persistStats();
   }
   const firstWinner = snapshot.game.winners?.[0] || snapshot.game.winner;
+  if (!previous?.game || (firstWinner && !(previous.game?.winners?.[0] || previous.game?.winner))) refreshCloudStats();
   if (firstWinner && !record.resultRecorded) {
     record.resultRecorded = true;
     if (firstWinner === snapshot.you) { state.stats.wins += 1; persistStats(); }
@@ -417,6 +468,7 @@ function recordOnline(snapshot, previous){
 function applyOnlineSnapshot(snapshot){
   const previous = state.online.room;
   if (previous?.code === snapshot.code && (previous.revision ?? 0) > (snapshot.revision ?? 0)) return;
+  if (Cloud.cloudConfigured) snapshot.players = snapshot.players.map(p => ({...p,connected:state.online.presence.includes(p.color)}));
   state.online.room = snapshot;
   recordOnline(snapshot, previous);
   if (snapshot.game && (state.view === 'online' || (state.view === 'game' && state.mode === 'online'))) {
@@ -446,8 +498,10 @@ async function joinRoom(code){
 async function onlineAction(action, extra = {}){
   const session = state.online.session;
   if (!session) throw new Error('Your room session has expired.');
-  const snapshot = await api(`rooms/${encodeURIComponent(session.code)}/action`, {token:session.token,action,...extra});
-  applyOnlineSnapshot(snapshot);
+  try {
+    const snapshot = await api(`rooms/${encodeURIComponent(session.code)}/action`, {token:session.token,action,revision:state.online.room?.revision,...extra});
+    applyOnlineSnapshot(snapshot);
+  } catch(error) { if (error.status === 409) await refreshOnline().catch(() => {}); throw error; }
 }
 async function leaveRoom(){
   const session = state.online.session;
@@ -462,7 +516,7 @@ async function resumeOnline(){
   if (!session) return;
   try {
     const snapshot = await api(`rooms/${encodeURIComponent(session.code)}?token=${encodeURIComponent(session.token)}`);
-    state.view = 'online'; state.online.room = null; connectRoom(); applyOnlineSnapshot(snapshot);
+    state.view = 'online'; state.online.room = snapshot; connectRoom(); applyOnlineSnapshot(snapshot);
     window.scrollTo({top:0,behavior:'instant'});
   } catch(error){
     state.online.session = null; state.online.room = null; storage.remove('online-session', true); toast(error.message);
@@ -488,7 +542,7 @@ function friendlyError(error){
   return error?.message || 'Something went wrong. Please try again.';
 }
 function forgotPassword(){
-  if (!Auth.authConfigured) { toast('Configure Firebase to enable account sign-in.'); return; }
+  if (!Auth.authConfigured) { toast('Account sign-in is unavailable in local-server mode.'); return; }
   openModal('Reset password', `<p>Enter your account email and we’ll send a password reset link.</p><form data-form="reset-password"><label class="field-label" for="reset-email">Email address</label><input class="field" id="reset-email" name="email" type="email" required autocomplete="email"><div class="modal-actions"><button type="button" class="secondary-button" data-action="close-modal">Cancel</button><button type="submit" class="primary-button">Send reset link</button></div></form>`);
 }
 function passwordModal(){
@@ -496,7 +550,7 @@ function passwordModal(){
   openModal('Change password', `<form data-form="change-password"><label class="field-label" for="new-password">New password</label><input class="field" id="new-password" name="password" type="password" minlength="6" required autocomplete="new-password"><div class="modal-actions"><button type="button" class="secondary-button" data-action="close-modal">Cancel</button><button type="submit" class="primary-button">Update password</button></div></form>`);
 }
 async function doSignOut(){
-  try { if (state.authUser) await Auth.signOut(); state.authUser = null; state.profile = {name:'Guest Player',email:''}; persistProfile(); state.authMode='login'; navigate('auth'); }
+  try { if (state.authUser) await Auth.signOut(); state.authUser = null; state.cloudStats = null; state.profile = {name:'Guest Player',email:'',avatarUrl:''}; persistProfile(); state.authMode='login'; navigate('auth'); }
   catch(error){ toast(friendlyError(error)); }
 }
 async function setPreference(input){
@@ -572,7 +626,7 @@ document.addEventListener('click', async event => {
       break;
     case 'forgot-password': forgotPassword(); break;
     case 'change-password': passwordModal(); break;
-    case 'privacy': openModal('Privacy information', `<p><strong>On this device:</strong> your profile, preferences, saved pass-and-play game, and game statistics are stored in your browser’s local storage.</p><p><strong>Private rooms:</strong> a room server temporarily stores player names, room sessions, and game state in memory. Rooms disappear when the server restarts or expires them.</p><p>If you configure Firebase sign-in, Firebase processes account data under your own project’s policies. Replace this notice with a policy appropriate for your deployment.</p>`, `<button class="primary-button" data-action="close-modal">Done</button>`); break;
+    case 'privacy': openModal('Privacy information', `<p><strong>On this device:</strong> guest profile, preferences, pass-and-play saves, and local statistics are stored in your browser.</p><p><strong>Cloud:</strong> Supabase stores account information, uploaded public profile photos, online-game statistics, player names, and private room game state. Room session tokens stay in this browser; the server stores only their hashes. Rooms expire after 7 days of inactivity.</p><p>Replace this notice with a privacy policy appropriate for your deployment.</p>`, `<button class="primary-button" data-action="close-modal">Done</button>`); break;
     case 'terms': openModal('Terms information', `<p>Nstar Ludo is a browser-based recreation of the referenced game. Play responsibly and respect other players.</p><p>Online rooms are a demonstration and do not provide a production service guarantee. Add your own terms before deploying publicly.</p>`, `<button class="primary-button" data-action="close-modal">Done</button>`); break;
   }
 });
@@ -587,8 +641,11 @@ document.addEventListener('submit', async event => {
     if (kind === 'profile') {
       const name = String(data.get('name') || '').trim().slice(0,24);
       if (!name) throw new Error('Please enter a player name.');
-      if (state.authUser) await Auth.updateName(name);
-      state.profile.name = name; persistProfile(); closeModal(); render(); toast('Profile updated.');
+      if (state.authUser) {
+        await Auth.updateName(name);
+        state.profile = await Cloud.saveProfile(state.authUser,name,data.get('avatar'));
+      } else state.profile.name = name;
+      persistProfile(); closeModal(); render(); toast('Profile updated.');
     } else if (kind === 'join-room') {
       const code = String(data.get('code') || '').trim().toUpperCase();
       if (!/^[A-Z2-9]{6}$/.test(code)) throw new Error('Enter the 6-character room code.');
@@ -600,10 +657,11 @@ document.addEventListener('submit', async event => {
         const name = String(data.get('name') || '').trim();
         if (!name) throw new Error('Please enter your name.');
         const result = await Auth.signUp(name,email,password);
-        state.authUser = result.user; state.profile = {name,email}; persistProfile();
+        if (result.requiresEmailConfirmation) { state.authMode='login'; navigate('auth'); toast('Check your email to confirm your account, then sign in.'); return; }
+        state.authUser = result.user; state.profile = {name,email,avatarUrl:'',ownerId:result.user?.id}; persistProfile();
       } else {
         const result = await Auth.logIn(email,password);
-        state.authUser = result.user; state.profile = {name:result.user.displayName || email.split('@')[0],email}; persistProfile();
+        state.authUser = result.user; state.profile = {name:result.user.displayName || email.split('@')[0],email,avatarUrl:'',ownerId:result.user.id}; persistProfile();
       }
       navigate('home'); toast('Welcome to Nstar Ludo!');
     } else if (kind === 'reset-password') {
@@ -620,12 +678,22 @@ if (incomingRoom && /^[A-Z2-9]{6}$/i.test(incomingRoom)) { state.online.joinCode
 render();
 if (state.view === 'online') checkOnline();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) navigator.serviceWorker.register('./sw.js').catch(() => {});
-if (Auth.authConfigured) Auth.observeAuth(user => {
+let authGeneration = 0;
+if (Auth.authConfigured) Auth.observeAuth(async (user,event) => {
+  const generation = ++authGeneration;
   state.authUser = user;
   if (user) {
-    state.profile = {name:user.displayName || user.email?.split('@')[0] || 'Player',email:user.email || ''}; persistProfile();
+    try {
+      const account = await Cloud.loadAccount(user);
+      if (generation !== authGeneration) return;
+      state.profile = account.profile; state.cloudStats = account.stats; persistProfile();
+    } catch(error) { console.warn('Cloud profile unavailable:',error.message); }
+  } else {
+    state.cloudStats = null;
+    if (state.profile.ownerId) { state.profile = {name:'Guest Player',email:'',avatarUrl:''}; persistProfile(); }
   }
   if (state.view === 'home' || state.view === 'settings') render();
+  if (event === 'PASSWORD_RECOVERY' && user) passwordModal();
 }).catch(error => console.warn('Account sign-in unavailable:', error.message));
 window.addEventListener('online', () => { if (state.view === 'online') checkOnline(); });
 window.addEventListener('offline', () => { if (state.view === 'online') { state.online.available=false; render(); } });

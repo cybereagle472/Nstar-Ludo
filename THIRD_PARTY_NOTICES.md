@@ -21,3 +21,7 @@ The upstream APK and screenshots are not included; they were used only to inspec
 ## Firebase SDK
 
 When and only when the user configures Firebase, `auth.js` loads the official Firebase web SDK from Google's CDN at runtime. No Firebase SDK files or project credentials are bundled in this repository. Consult the SDK's upstream terms and the Firebase project policies for a deployment.
+
+## Supabase JavaScript SDK
+
+`vendor/supabase-js.mjs` is a browser bundle of `@supabase/supabase-js` 2.118.0 and its dependencies. Supabase packages are MIT-licensed; included dependency license texts are in `vendor/DEPENDENCY-LICENSES.txt` and `vendor/SUPABASE-LICENSE.txt`.

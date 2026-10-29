@@ -1,51 +1,46 @@
-import { firebaseConfig } from './firebase-config.js';
+import { cloudConfigured, getClient } from './supabase.js';
+import { supabaseConfig } from './supabase-config.js';
 
-export const authConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId);
-let ready;
-async function firebase() {
-  if (!authConfigured) throw new Error('Account sign-in needs a Firebase project. See README.md for setup.');
-  if (!ready) ready = Promise.all([
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js'),
-    import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js'),
-  ]).then(([app, api]) => ({ api, auth: api.getAuth(app.initializeApp(firebaseConfig)) })).catch(error => {
-    ready = null;
-    throw new Error(`Could not load Firebase sign-in: ${error.message}`);
-  });
-  return ready;
-}
+export const authConfigured = cloudConfigured;
+export const googleConfigured = authConfigured && supabaseConfig.googleEnabled;
+const normalize = user => user ? {id:user.id,email:user.email || '',displayName:user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Player'} : null;
+const checked = ({data,error}) => { if (error) throw error; return data; };
+const redirectTo = () => new URL('./',location.href).href;
+
 export async function observeAuth(callback) {
-  if (!authConfigured) return callback(null);
-  const {api,auth} = await firebase();
-  return api.onAuthStateChanged(auth, callback);
+  if (!authConfigured) return callback(null,'INITIAL_SESSION');
+  const sb = await getClient();
+  const {data:{subscription}} = sb.auth.onAuthStateChange((event,session) => {
+    // Supabase callbacks run while holding an auth lock; defer other API work.
+    setTimeout(() => callback(normalize(session?.user),event),0);
+  });
+  return () => subscription.unsubscribe();
 }
-export async function logIn(email, password) {
-  const {api,auth} = await firebase();
-  return api.signInWithEmailAndPassword(auth, email, password);
+export async function logIn(email,password) {
+  const sb = await getClient();
+  const data = checked(await sb.auth.signInWithPassword({email,password}));
+  return {user:normalize(data.user)};
 }
-export async function signUp(name, email, password) {
-  const {api,auth} = await firebase();
-  const credential = await api.createUserWithEmailAndPassword(auth, email, password);
-  await api.updateProfile(credential.user, { displayName:name });
-  return credential;
+export async function signUp(name,email,password) {
+  const sb = await getClient();
+  const data = checked(await sb.auth.signUp({email,password,options:{data:{name},emailRedirectTo:redirectTo()}}));
+  return {user:normalize(data.user),requiresEmailConfirmation:!data.session};
 }
 export async function googleLogin() {
-  const {api,auth} = await firebase();
-  return api.signInWithPopup(auth, new api.GoogleAuthProvider());
+  if (!googleConfigured) throw new Error('Google sign-in needs to be configured in Supabase first.');
+  const sb = await getClient();
+  checked(await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:redirectTo()}}));
 }
 export async function resetPassword(email) {
-  const {api,auth} = await firebase();
-  return api.sendPasswordResetEmail(auth, email);
+  const sb = await getClient();
+  checked(await sb.auth.resetPasswordForEmail(email,{redirectTo:redirectTo()}));
 }
 export async function changePassword(password) {
-  const {api,auth} = await firebase();
-  if (!auth.currentUser) throw new Error('Sign in before changing your password.');
-  return api.updatePassword(auth.currentUser, password);
+  const sb = await getClient(); checked(await sb.auth.updateUser({password}));
 }
 export async function updateName(name) {
-  const {api,auth} = await firebase();
-  if (auth.currentUser) await api.updateProfile(auth.currentUser, { displayName:name });
+  const sb = await getClient(); checked(await sb.auth.updateUser({data:{name}}));
 }
 export async function signOut() {
-  const {api,auth} = await firebase();
-  return api.signOut(auth);
+  const sb = await getClient(); const {error} = await sb.auth.signOut(); if (error) throw error;
 }
